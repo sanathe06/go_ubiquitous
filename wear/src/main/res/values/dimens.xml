@@ -4,5 +4,12 @@
     <dimen name="digital_text_size_round">45dp</dimen>
     <dimen name="digital_x_offset">15dp</dimen>
     <dimen name="digital_x_offset_round">25dp</dimen>
-    <dimen name="digital_y_offset">90dp</dimen>
+    <dimen name="time_y_offset">60dp</dimen>
+    <dimen name="text_size_time">40sp</dimen>
+    <dimen name="text_size_date">20sp</dimen>
+    <dimen name="date_y_offset">90dp</dimen>
+    <dimen name="divider_y_offset">110dp</dimen>
+    <dimen name="divider_half_width">30dp</dimen>
+    <dimen name="text_size_temp">30dp</dimen>
+    <dimen name="temp_y_offset">150dp</dimen>
 </resources>
