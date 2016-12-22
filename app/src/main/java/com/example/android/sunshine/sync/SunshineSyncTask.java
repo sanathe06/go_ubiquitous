@@ -18,17 +18,45 @@ package com.example.android.sunshine.sync;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
+import android.database.Cursor;
+import android.net.Uri;
 import android.text.format.DateUtils;
+import android.util.Log;
 
 import com.example.android.sunshine.data.SunshinePreferences;
 import com.example.android.sunshine.data.WeatherContract;
 import com.example.android.sunshine.utilities.NetworkUtils;
 import com.example.android.sunshine.utilities.NotificationUtils;
 import com.example.android.sunshine.utilities.OpenWeatherJsonUtils;
+import com.example.android.sunshine.utilities.SunshineDateUtils;
+import com.example.android.sunshine.utilities.SunshineWeatherUtils;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.wearable.DataMap;
+import com.google.android.gms.wearable.PutDataMapRequest;
+import com.google.android.gms.wearable.PutDataRequest;
+import com.google.android.gms.wearable.Wearable;
 
 import java.net.URL;
+import java.util.concurrent.TimeUnit;
 
 public class SunshineSyncTask {
+    public static final String TAG = SunshineSyncTask.class.getSimpleName();
+
+
+    private static final String[] NOTIFY_WEATHER_PROJECTION = new String[]{
+            WeatherContract.WeatherEntry.COLUMN_WEATHER_ID,
+            WeatherContract.WeatherEntry.COLUMN_MAX_TEMP,
+            WeatherContract.WeatherEntry.COLUMN_MIN_TEMP
+    };
+
+    private static final int INDEX_WEATHER_ID = 0;
+    private static final int INDEX_MAX_TEMP = 1;
+    private static final int INDEX_MIN_TEMP = 2;
+    private static final String PATH_WEATHER = "/weather";
+    private static final String KEY_WEATHER_ID = "key_weather_id";
+    private static final String KEY_MAX_TEMP = "key_max_temp";
+    private static final String KEY_MIN_TEMP = "key_min_temp";
 
     /**
      * Performs the network request for updated weather, parses the JSON from that request, and
@@ -103,6 +131,10 @@ public class SunshineSyncTask {
                 if (notificationsEnabled && oneDayPassedSinceLastNotification) {
                     NotificationUtils.notifyUserOfNewWeather(context);
                 }
+                /*
+                 * send weather update to watch to show in watch face
+                 */
+                sendWeatherDataToWatch(context);
 
             /* If the code reaches this point, we have successfully performed our sync */
 
@@ -112,5 +144,37 @@ public class SunshineSyncTask {
             /* Server probably invalid */
             e.printStackTrace();
         }
+    }
+
+    private static void sendWeatherDataToWatch(final Context context) {
+        long normalizedUtcNow = SunshineDateUtils.normalizeDate(System.currentTimeMillis());
+        Uri weatherUri = WeatherContract.WeatherEntry.buildWeatherUriWithDate(normalizedUtcNow);
+        Cursor cursor = context.getContentResolver().query(weatherUri, NOTIFY_WEATHER_PROJECTION, null, null, null);
+
+        if (cursor == null) {
+            return;
+        }
+        if (!cursor.moveToFirst()) {
+            cursor.close();
+            return;
+        }
+
+        GoogleApiClient googleApiClient = new GoogleApiClient.Builder(context)
+                .addApi(Wearable.API)
+                .build();
+
+        ConnectionResult connectionResult = googleApiClient.blockingConnect(30, TimeUnit.SECONDS);
+        if (!connectionResult.isSuccess()) {
+            return;
+        }
+
+        PutDataMapRequest mapRequest = PutDataMapRequest.create(PATH_WEATHER);
+        DataMap dataMap = mapRequest.getDataMap();
+        dataMap.putString(KEY_MAX_TEMP, SunshineWeatherUtils.formatTemperature(context, cursor.getDouble(INDEX_MAX_TEMP)));
+        dataMap.putString(KEY_MIN_TEMP, SunshineWeatherUtils.formatTemperature(context, cursor.getDouble(INDEX_MIN_TEMP)));
+        dataMap.putInt(KEY_WEATHER_ID, cursor.getInt(INDEX_WEATHER_ID));
+        Log.d(TAG, "sendWeatherDataToWatch: " + dataMap.toString());
+        PutDataRequest putDataRequest = mapRequest.asPutDataRequest();
+        Wearable.DataApi.putDataItem(googleApiClient, putDataRequest);
     }
 }
